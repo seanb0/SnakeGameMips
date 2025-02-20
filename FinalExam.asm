@@ -23,11 +23,14 @@ screenWidth: 	.word 64
 screenHeight: 	.word 64
 
 #Colors
-snakeColor: 	.word	0x0066cc	 # blue
+snakeColor: 	 .word	 0x0066cc	 # blue
+snakeColorY:    .word   0xffff00       #yellow
+snakeColorR: 	 .word	 0xff0000	 # Red
+snakeColorG:    .word   0x00ff00       #Green
+
 backgroundColor:.word	0x000000	 # black
 borderColor:    .word	0x00ff00	 # green	
 fruitColor: 	.word	0xcc6611	 # orange
-obstacleColor: .word    0xff0000        # red 
 
 #score variable
 score: 		.word 0
@@ -189,22 +192,6 @@ DrawBorder:
 	
 	bne $t1, 64, BottomLoop	# loop through to draw entire bottom border
 	
-######################################################
-# Draw Obstacles 
-######################################################	
-DrawObstacles:
-	li $t1, 16	#load Y coordinate for obstacles at 16
-	ObstacleLoop:
-	move $a1, $t1	#move y coordinate into $a1
-	li $a0, 25	# load x direction to 0, doesnt change
-	jal CoordinateToAddress	#get screen coordinates
-	move $a0, $v0	# move screen coordinates into $a0
-	lw $a1, obstacleColor	#move color code into $a1
-	jal DrawPixel	#draw the color at the screen location
-	add $t1, $t1, 1	#increment y coordinate
-	
-	bne $t1, 18, ObstacleLoop	#loop through to draw entire obstacle
-
 ######################################################
 # Draw Initial Snake Position
 ######################################################
@@ -369,7 +356,7 @@ DrawDownLoop:
 	add $a1, $t1, $zero
 	jal CoordinateToAddress
 	add $a0, $v0, $zero
-	lw $a1, snakeColor
+	lw $a1, snakeColorR
 	jal DrawPixel
 	
 	sw  $t1, snakeHeadY	
@@ -389,7 +376,7 @@ DrawLeftLoop:
 	add $a1, $t1, $zero
 	jal CoordinateToAddress
 	add $a0, $v0, $zero
-	lw $a1, snakeColor
+	lw $a1, snakeColorY
 	jal DrawPixel
 	
 	sw  $t0, snakeHeadX	
@@ -409,7 +396,7 @@ DrawRightLoop:
 	add $a1, $t1, $zero
 	jal CoordinateToAddress
 	add $a0, $v0, $zero
-	lw $a1, snakeColor
+	lw $a1, snakeColorG
 	jal DrawPixel
 	
 	sw  $t0, snakeHeadX
@@ -498,7 +485,7 @@ IncreaseLengthDown:
 StoreLocationDown:
 	sw $t8, locationInArray  
 DrawTailDown:	
-	lw $a1, snakeColor
+	lw $a1, snakeColorR
 	jal DrawPixel	
 	#erase behind the snake
 	lw $t0, snakeTailX
@@ -540,7 +527,7 @@ IncreaseLengthLeft:
 StoreLocationLeft:
 	sw $t8, locationInArray  
 DrawTailLeft:	
-	lw $a1, snakeColor
+	lw $a1, snakeColorY
 	jal DrawPixel	
 	#erase behind the snake
 	lw $t0, snakeTailX
@@ -600,7 +587,7 @@ StoreLocationRight:
 	sw $t8, locationInArray  
 DrawTailRight:	
 
-	lw $a1, snakeColor
+	lw $a1, snakeColorG
 	jal DrawPixel	
 	#erase behind the snake
 	lw $t0, snakeTailX
@@ -896,10 +883,8 @@ CheckUp:
 	#add $s6, $t1, $zero
 	lw $t2, snakeColor
 	lw $t3, borderColor
-	lw $t4, obstacleColor
 	beq $t1, $t2, Exit #If colors are equal - YOU LOST!
 	beq $t1, $t3, Exit #If you hit the border - YOU LOST!
-	beq $t1, $t4, Exit #If you hit the obstacle - YOU LOST!
 	j BodyCollisionDone # if not, leave function
 
 CheckDown:
@@ -912,10 +897,8 @@ CheckDown:
 	#add $s6, $t1, $zero
 	lw $t2, snakeColor
 	lw $t3, borderColor
-	lw $t4, obstacleColor
 	beq $t1, $t2, Exit #If colors are equal - YOU LOST!
 	beq $t1, $t3, Exit #If you hit the border - YOU LOST!
-	beq $t1, $t4, Exit #If you hit the obstacle - YOU LOST!
 	j BodyCollisionDone # if not, leave function
 
 CheckLeft:
@@ -928,10 +911,8 @@ CheckLeft:
 	#add $s6, $t1, $zero
 	lw $t2, snakeColor
 	lw $t3, borderColor
-	lw $t4, obstacleColor
 	beq $t1, $t2, Exit #If colors are equal - YOU LOST!
 	beq $t1, $t3, Exit #If you hit the border - YOU LOST!
-	beq $t1, $t4, Exit #If you hit the obstacle - YOU LOST!
 	j BodyCollisionDone # if not, leave function
 
 CheckRight:
@@ -944,10 +925,8 @@ CheckRight:
 	#add $s6, $t1, $zero
 	lw $t2, snakeColor
 	lw $t3, borderColor
-	lw $t4, obstacleColor
 	beq $t1, $t2, Exit #If colors are equal - YOU LOST!
 	beq $t1, $t3, Exit #If you hit the border - YOU LOST!
-	beq $t1, $t4, Exit #If you hit the obstacle - YOU LOST!
 	j BodyCollisionDone # if not, leave function
 
 BodyCollisionDone:
