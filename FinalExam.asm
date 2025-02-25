@@ -23,14 +23,23 @@ screenWidth: 	.word 64
 screenHeight: 	.word 64
 
 #Colors
-snakeColor: 	 .word	 0x0066cc	 # blue
-snakeColorY:    .word   0xffff00       #yellow
-snakeColorR: 	 .word	 0xff0000	 # Red
-snakeColorG:    .word   0x00ff00       #Green
+snakeColor: 	.word	0x0066cc	 # blue
+snakeColorY:    .word   0xffff00       # yellow
+snakeColorR: 	 .word	 0xee0000	 # Red
+snakeColorG:    .word   0x00ff00       # Green
+
+blizardSnake:  .word   0xfffffe       # off white
+blizardColor:  .word   0xffffff	 # white
 
 backgroundColor:.word	0x000000	 # black
-borderColor:    .word	0x00ff00	 # green	
-fruitColor: 	.word	0xcc6611	 # orange
+borderColor:    .word	0xff0000	 # red	
+fruitColor: 	.word	0xfcbc19	 # orange
+	 
+desertColor: 	.word	0xFEC991	 
+iceColor: 	.word	0x34c6eb	 
+
+# terrain map:
+terrainMatrix: .space 32768 # in bytes, each row isevery 512 bits, and colum is ever 8 bits
 
 #score variable
 score: 		.word 0
@@ -53,6 +62,7 @@ snakeTailX:	.word 31
 snakeTailY:	.word 37
 direction:	.word 119 #initially moving up
 tailDirection:	.word 119
+isOnIce:	.word 0 #default is snake not on ice
 # direction variable
 # 119 - moving up - W
 # 115 - moving down - S
@@ -111,6 +121,7 @@ Init:
 	sw $t0, scoreGain
 	li $t0, 200
 	sw $t0, gameSpeed
+	sw $zero, isOnIce #reset to 0
 	sw $zero, arrayPosition
 	sw $zero, locationInArray
 	sw $zero, scoreArrayPosition
@@ -191,7 +202,455 @@ DrawBorder:
 	add $t1, $t1, 1	#increment X coordinate
 	
 	bne $t1, 64, BottomLoop	# loop through to draw entire bottom border
+
+######################################################
+# Set Defaults for Terrain
+######################################################  
+ZeroMap:
+	li $t2, 0 # X
+	MapZeroOuterloop:
+	li $t1, 0 #Y
+		MapZeroInnerloop:
+			li $t4, 0
+			beqz $t1, doT4Set
+			beqz $t2, doT4Set
+			beq $t1, 63, doT4Set
+			beq $t2, 63, doT4Set
+			j skipT4Set
+			doT4Set:
+			li $t4, 3 # border wall
+			skipT4Set:
+		
+    			# save to memory
+    			mul $t5, $t2, 512
+    			mul $t6, $t1, 8
+    			add $t5, $t5, $t6
+    			la $t6, terrainMatrix
+    			add $t5, $t5, $t6
+    			sb $t4, 0($t5)
+    		
+    			add $t1, $t1, 1
+    			bne $t1, 64, MapZeroInnerloop    
+    		add $t2, $t2, 1
+    		bne $t2, 64, MapZeroOuterloop
 	
+######################################################
+# Draw Map (NEW)
+######################################################    
+#move border out a bit (reverse direction compared to map gen):
+li $t0, 0 # is 1 on game end
+li $t3, 2 # times to gen border
+li $t9, 0 # comparision value (move back and forth) TODO
+li $t8, -1 # value to increment by: -1 or 1
+li $t7, 62 # default for X and Y
+BorderGen:
+move $t2, $t7 # X
+BorderGenOuterloop:
+	move $t1, $t7 #Y
+	BorderGenInnerloop:
+		move $a1, $t1    # move y coordinate into $a1
+		move $a0, $t2    # move x coordinate into $a0
+		jal CoordinateToAddress    # get screen coordinates
+    		move $t5, $v0    # move screen coordinates into $t5 to save it
+
+		#random number:
+		li $v0, 42
+		li $a1, 8
+		syscall
+		addi $t4, $a0, 5
+			
+		# move back to $a0
+		move $a0, $t5
+		
+		# check numbers and branch
+		checkB:
+		beq $t4, 3, isBWall
+		beq $t4, 5, isB56
+		beq $t4, 6, isB56
+		beq $t4, 7, isB78
+		beq $t4, 8, isB78
+		beq $t4, 9, isB910
+		beq $t4, 10, isB910
+		beq $t4, 11, isB1112
+		beq $t4, 12, isB1112
+			
+		j skipInnerBorderGenLoop
+			
+		isBWall:
+			lw $a1, borderColor  
+			j gotBColor
+			
+		isB56: #top
+			mul $t5, $t2, 512
+			subi $t5, $t5, 512
+    			mul $t6, $t1, 8
+    			add $t5, $t5, $t6
+    			la $t6, terrainMatrix
+    			add $t5, $t5, $t6
+    			lb $t4, 0($t5)
+    			j checkB
+		isB78: #right
+			mul $t5, $t2, 512
+    			mul $t6, $t1, 8
+    			addi $t6, $t6, 8
+    			add $t5, $t5, $t6
+    			la $t6, terrainMatrix
+    			add $t5, $t5, $t6
+    			lb $t4, 0($t5)
+    			j checkB
+		isB910: #bottom
+			mul $t5, $t2, 512
+			addi $t5, $t5, 512
+    			mul $t6, $t1, 8
+    			add $t5, $t5, $t6
+    			la $t6, terrainMatrix
+    			add $t5, $t5, $t6
+    			lb $t4, 0($t5)
+    			j checkB
+		isB1112: #left
+			mul $t5, $t2, 512
+    			mul $t6, $t1, 8
+    			subi $t6, $t6, 8
+    			add $t5, $t5, $t6
+    			la $t6, terrainMatrix
+    			add $t5, $t5, $t6
+    			lb $t4, 0($t5)
+    			j checkB
+		gotBColor:
+		
+    		# save to memory
+    		mul $t5, $t2, 512
+    		mul $t6, $t1, 8
+    		add $t5, $t5, $t6
+    		la $t6, terrainMatrix
+    		add $t5, $t5, $t6
+    		sb $t4, 0($t5)
+    		
+    		jal DrawPixel
+    		skipInnerBorderGenLoop:
+    		add $t1, $t1, $t8
+    		bne $t1, $t9, BorderGenInnerloop    
+    	add $t2, $t2, $t8
+    	bne $t2, $t9, BorderGenOuterloop
+
+beq $t8, -1 reverseBorderGen
+j skipBReverse
+reverseBorderGen:
+li $t9, 63 # comparision value (move back and forth) TODO
+li $t8, 1 # value to increment by: -1 or 1
+li $t7, 1 # default for X and Y
+j BorderGen
+
+skipBReverse:
+li $t9, 0 # comparision value (move back and forth) TODO
+li $t8, -1 # value to increment by: -1 or 1
+li $t7, 62 # default for X and Y
+
+subi $t3, $t3, 1
+bnez $t3, BorderGen # loop back up
+bnez $t0, endGame2	
+		
+# generate terrain
+li $t3, 1 # redraw map a few times
+li $t0, 0
+DrawMap:
+	li $t2, 1 # X
+	MapGenOuterloop:
+	li $t1, 1 # Y
+		MapGenInnerloop:
+			move $a1, $t1    # move y coordinate into $a1
+    			move $a0, $t2    # move x coordinate into $a0
+    			jal CoordinateToAddress    # get screen coordinates
+    			move $t5, $v0    # move screen coordinates into $t5 to save it
+
+			#random number:
+			li $v0, 42
+			li $a1, 35
+			syscall
+			move $t4, $a0
+			
+			# move back to $a0
+			move $a0, $t5
+			
+			# 1 = ice, 2 = desert, 3 = wall, 4 = blizard, 5 || 6 = top, 7 || 8 = right,
+			# 9 || 10 = bottom, 11 || 12 = left, 13 || 14 || 15 = keep same color, other = nothing
+		
+			# check numbers and branch
+			check:
+			beq $t4, 1, is1
+			beq $t4, 2, is2
+			beq $t4, 3, is3
+			beq $t4, 13, is3 #need an extra chance for walls
+			beq $t4, 14, is3 #need an extra chance for walls
+			beq $t4, 4, is4
+			
+			beq $t4, 5, is56
+			beq $t4, 6, is56
+			beq $t4, 7, is78
+			beq $t4, 8, is78
+			beq $t4, 9, is910
+			beq $t4, 10, is910
+			beq $t4, 11, is1112
+			beq $t4, 12, is1112
+			
+			j skipInnerGenLoop
+			
+			is1:
+				lw $a1, iceColor  
+				j gotColor
+			is2:
+				lw $a1, desertColor  
+				j gotColor
+			is3:
+				lw $a1, borderColor  
+				j gotColor
+			is4:
+				lw $a1, blizardColor  
+				j gotColor
+			is56: #top
+				mul $t5, $t2, 512
+				subi $t5, $t5, 512
+    				mul $t6, $t1, 8
+    				add $t5, $t5, $t6
+    				la $t6, terrainMatrix
+    				add $t5, $t5, $t6
+    				lb $t4, 0($t5)
+    				j check
+			is78: #right
+				mul $t5, $t2, 512
+    				mul $t6, $t1, 8
+    				addi $t6, $t6, 8
+    				add $t5, $t5, $t6
+    				la $t6, terrainMatrix
+    				add $t5, $t5, $t6
+    				lb $t4, 0($t5)
+    				j check
+			is910: #bottom
+				mul $t5, $t2, 512
+				addi $t5, $t5, 512
+    				mul $t6, $t1, 8
+    				add $t5, $t5, $t6
+    				la $t6, terrainMatrix
+    				add $t5, $t5, $t6
+    				lb $t4, 0($t5)
+    				j check
+			is1112: #left
+				mul $t5, $t2, 512
+    				mul $t6, $t1, 8
+    				subi $t6, $t6, 8
+    				add $t5, $t5, $t6
+    				la $t6, terrainMatrix
+    				add $t5, $t5, $t6
+    				lb $t4, 0($t5)
+    				j check
+			gotColor:
+		
+    			# save to memory
+    			mul $t5, $t2, 512
+    			mul $t6, $t1, 8
+    			add $t5, $t5, $t6
+    			la $t6, terrainMatrix
+    			add $t5, $t5, $t6
+    			sb $t4, 0($t5)
+    		
+    			jal DrawPixel
+    			skipInnerGenLoop:
+    			addi $t1, $t1, 1
+    			bne $t1, 63, MapGenInnerloop    
+    		addi $t2, $t2, 1
+    		bne $t2, 63, MapGenOuterloop
+
+
+# Normalize Map (remove any terrain without neighbors of the same type)
+NormMap:
+	li $t2, 1 # X
+	MapNormOuterloop:
+	li $t1, 1 #Y
+		MapNormInnerloop:
+			mul $t5, $t2, 512
+			mul $t6, $t1, 8
+    			add $t5, $t5, $t6
+    			la $t6, terrainMatrix
+    			add $t5, $t5, $t6
+    			lb $t7, 0($t5) # byte on tile to check
+    				
+			#top
+			mul $t5, $t2, 512
+			subi $t5, $t5, 512
+    			mul $t6, $t1, 8
+    			add $t5, $t5, $t6
+    			la $t6, terrainMatrix
+    			add $t5, $t5, $t6
+    			lb $t4, 0($t5)
+    			beq $t4, $t7, skipInnerNormLoop
+    			
+			#right
+			mul $t5, $t2, 512
+    			mul $t6, $t1, 8
+    			addi $t6, $t6, 8
+    			add $t5, $t5, $t6
+    			la $t6, terrainMatrix
+    			add $t5, $t5, $t6
+    			lb $t4, 0($t5)
+    			beq $t4, $t7, skipInnerNormLoop
+
+			#bottom
+			mul $t5, $t2, 512
+			addi $t5, $t5, 512
+    			mul $t6, $t1, 8
+    			add $t5, $t5, $t6
+    			la $t6, terrainMatrix
+    			add $t5, $t5, $t6
+    			lb $t4, 0($t5)
+    			beq $t4, $t7, skipInnerNormLoop
+    			
+			#left
+			mul $t5, $t2, 512
+    			mul $t6, $t1, 8
+    			subi $t6, $t6, 8
+    			add $t5, $t5, $t6
+    			la $t6, terrainMatrix
+    			add $t5, $t5, $t6
+    			lb $t4, 0($t5)
+    			beq $t4, $t7, skipInnerNormLoop
+		
+    			# save to memory
+    			mul $t5, $t2, 512
+    			mul $t6, $t1, 8
+    			add $t5, $t5, $t6
+    			la $t6, terrainMatrix
+    			add $t5, $t5, $t6
+    			sb $t4, 0($t5)
+    		
+    			move $a1, $t1    # move y coordinate into $a1
+    			move $a0, $t2    # move x coordinate into $a0
+    			jal CoordinateToAddress    # get screen coordinates
+    			move $a0, $v0
+    			move $a1, $t4
+    			jal CodeToColor
+    		
+    			jal DrawPixel
+    			
+    			skipInnerNormLoop:
+    			addi $t1, $t1, 1
+    			bne $t1, 63, MapNormInnerloop    
+    		addi $t2, $t2, 1
+    		bne $t2, 63, MapNormOuterloop
+
+bnez $t0, endGen # to normalize aftter zone expansion
+
+subi $t3, $t3, 1
+bnez $t3, DrawMap # loop back up	
+
+#expand terrain zones
+li $t3, 6
+ZoneGen:
+li $t2, 62 # X
+ZoneGenOuterloop:
+	li $t1, 62 #Y
+	ZoneGenInnerloop:
+		move $a1, $t1    # move y coordinate into $a1
+		move $a0, $t2    # move x coordinate into $a0
+		jal CoordinateToAddress    # get screen coordinates
+    		move $t5, $v0    # move screen coordinates into $t5 to save it
+
+		#random number:
+		li $v0, 42
+		li $a1, 8 # add to result, can't be 1, 2, or 4
+		syscall
+		addi $t4, $a0, 5
+			
+		# move back to $a0
+		move $a0, $t5
+		
+		# check numbers and branch
+		checkZ:
+		beq $t4, 1, isZ1
+		beq $t4, 2, isZ2
+		beq $t4, 4, isZ4
+				
+		beq $t4, 5, isZ56
+		beq $t4, 6, isZ56
+		beq $t4, 7, isZ78
+		beq $t4, 8, isZ78
+		beq $t4, 9, isZ910
+		beq $t4, 10, isZ910
+		beq $t4, 11, isZ1112
+		beq $t4, 12, isZ1112
+			
+		j skipInnerZoneGenLoop
+			
+		isZ1:
+			lw $a1, iceColor  
+			j gotZColor
+		isZ2:
+			lw $a1, desertColor  
+			j gotZColor
+		isZ4:
+			lw $a1, blizardColor  
+			j gotZColor
+			
+		isZ56: #top
+			mul $t5, $t2, 512
+			subi $t5, $t5, 512
+    			mul $t6, $t1, 8
+    			add $t5, $t5, $t6
+    			la $t6, terrainMatrix
+    			add $t5, $t5, $t6
+    			lb $t4, 0($t5)
+    			j checkZ
+		isZ78: #right
+			mul $t5, $t2, 512
+    			mul $t6, $t1, 8
+    			addi $t6, $t6, 8
+    			add $t5, $t5, $t6
+    			la $t6, terrainMatrix
+    			add $t5, $t5, $t6
+    			lb $t4, 0($t5)
+    			j checkZ
+		isZ910: #bottom
+			mul $t5, $t2, 512
+			addi $t5, $t5, 512
+    			mul $t6, $t1, 8
+    			add $t5, $t5, $t6
+    			la $t6, terrainMatrix
+    			add $t5, $t5, $t6
+    			lb $t4, 0($t5)
+    			j checkZ
+		isZ1112: #left
+			mul $t5, $t2, 512
+    			mul $t6, $t1, 8
+    			subi $t6, $t6, 8
+    			add $t5, $t5, $t6
+    			la $t6, terrainMatrix
+    			add $t5, $t5, $t6
+    			lb $t4, 0($t5)
+    			j checkZ
+		gotZColor:
+		
+    		# save to memory
+    		mul $t5, $t2, 512
+    		mul $t6, $t1, 8
+    		add $t5, $t5, $t6
+    		la $t6, terrainMatrix
+    		add $t5, $t5, $t6
+    		sb $t4, 0($t5)
+    		
+    		jal DrawPixel
+    		skipInnerZoneGenLoop:
+    		subi $t1, $t1, 1
+    		bnez $t1, ZoneGenInnerloop    
+    	subi $t2, $t2, 1
+    	bnez $t2, ZoneGenOuterloop
+
+subi $t3, $t3, 1
+bnez $t3, ZoneGen # loop back up	
+
+li $t0, 1
+j NormMap
+
+endGen:	
+
 ######################################################
 # Draw Initial Snake Position
 ######################################################
@@ -328,6 +787,7 @@ DrawUpLoop:
 	lw $a1, snakeHeadY
 	lw $a2, direction
 	jal CheckGameEndingCollision
+	jal CheckGameTerrainCollision
 	#draw head in new position, move Y position up
 	lw $t0, snakeHeadX
 	lw $t1, snakeHeadY
@@ -348,6 +808,7 @@ DrawDownLoop:
 	lw $a1, snakeHeadY
 	lw $a2, direction	
 	jal CheckGameEndingCollision
+	jal CheckGameTerrainCollision
 	#draw head in new position, move Y position down
 	lw $t0, snakeHeadX
 	lw $t1, snakeHeadY
@@ -368,6 +829,7 @@ DrawLeftLoop:
 	lw $a1, snakeHeadY
 	lw $a2, direction	
 	jal CheckGameEndingCollision
+	jal CheckGameTerrainCollision
 	#draw head in new position, move X position left
 	lw $t0, snakeHeadX
 	lw $t1, snakeHeadY
@@ -388,6 +850,7 @@ DrawRightLoop:
 	lw $a1, snakeHeadY
 	lw $a2, direction	
 	jal CheckGameEndingCollision
+	jal CheckGameTerrainCollision
 	#draw head in new position, move X position right
 	lw $t0, snakeHeadX
 	lw $t1, snakeHeadY
@@ -453,7 +916,17 @@ DrawTailUp:
 	add $a1, $t1, $zero
 	jal CoordinateToAddress
 	add $a0, $v0, $zero
-	lw $a1, backgroundColor
+	
+	# get the terrain color to replace the tail with
+	# start by getting the address in the matrix:
+	mul $t5, $t0, 512
+	mul $t6, $t1, 8
+    	add $t5, $t5, $t6
+    	la $t6, terrainMatrix
+    	add $t5, $t5, $t6
+    	lb $a1, 0($t5) # load the terrain code
+    	jal CodeToColor #convert a code such as 1 to hex for that terrain color
+	
 	jal DrawPixel	
 	j DrawFruit  #finished updating snake, update fruit
 
@@ -495,7 +968,17 @@ DrawTailDown:
 	add $a1, $t1, $zero
 	jal CoordinateToAddress
 	add $a0, $v0, $zero
-	lw $a1, backgroundColor
+	
+	# get the terrain color to replace the tail with
+	# start by getting the address in the matrix:
+	mul $t5, $t0, 512
+	mul $t6, $t1, 8
+    	add $t5, $t5, $t6
+    	la $t6, terrainMatrix
+    	add $t5, $t5, $t6
+    	lb $a1, 0($t5) # load the terrain code
+    	jal CodeToColor #convert a code such as 1 to hex for that terrain color
+	
 	jal DrawPixel	
 	j DrawFruit #finished updating snake, update fruit
 
@@ -537,7 +1020,17 @@ DrawTailLeft:
 	add $a1, $t1, $zero
 	jal CoordinateToAddress
 	add $a0, $v0, $zero
-	lw $a1, backgroundColor
+	
+	# get the terrain color to replace the tail with
+	# start by getting the address in the matrix:
+	mul $t5, $t0, 512
+	mul $t6, $t1, 8
+    	add $t5, $t5, $t6
+    	la $t6, terrainMatrix
+    	add $t5, $t5, $t6
+    	lb $a1, 0($t5) # load the terrain code
+    	jal CodeToColor #convert a code such as 1 to hex for that terrain color
+	
 	jal DrawPixel	
 	j DrawFruit  #finished updating snake, update fruit
 
@@ -597,7 +1090,17 @@ DrawTailRight:
 	add $a1, $t1, $zero
 	jal CoordinateToAddress
 	add $a0, $v0, $zero
-	lw $a1, backgroundColor
+	
+	# get the terrain color to replace the tail with
+	# start by getting the address in the matrix:
+	mul $t5, $t0, 512
+	mul $t6, $t1, 8
+    	add $t5, $t5, $t6
+    	la $t6, terrainMatrix
+    	add $t5, $t5, $t6
+    	lb $a1, 0($t5) # load the terrain code
+    	jal CodeToColor #convert a code such as 1 to hex for that terrain color
+	
 	jal DrawPixel
 	j DrawFruit  #finished updating snake, update fruit
 	
@@ -662,8 +1165,10 @@ DrawPixel:
 #	 $v0 = 1 - direction is acceptable
 ##################################################################
 CheckDirection:
+	lw $t6, isOnIce
 	beq $a0, $a1, Same  #if the input is the same as current direction
 				#continue moving in the direction
+	bnez $t6, unacceptable #if snake is on ice, slide (prevents direction change)
 	beq $a0, 119, checkIsDownPressed #if  moving up, check to see if down is pressed
 	beq $a0, 115, checkIsUpPressed	#if moving down, check to see if up is pressed
 	beq $a0, 97, checkIsRightPressed #if moving left, check to see if right is pressed
@@ -787,6 +1292,8 @@ Same:
 	li $v0, 1
 	
 DirectionCheckFinished:
+	li $t6, 0
+	sw $t6, isOnIce #reset the flag
 	jr $ra
 	
 ##################################################################
@@ -881,9 +1388,22 @@ CheckUp:
 	#get color at screen address
 	lw $t1, 0($v0)
 	#add $s6, $t1, $zero
+	lw $t4, blizardColor    	 # load blizard color
+    	beq $t1, $t4, BodyCollisionDone #exit if blizard condition
 	lw $t2, snakeColor
 	lw $t3, borderColor
+	lw $t4, snakeColorR
+    	lw $t5, snakeColorG
+    	
+    	lw $t6, snakeColorY
+    	beq $t1, $t6, Exit
+    	
+    	lw $t6, blizardSnake
+    	
 	beq $t1, $t2, Exit #If colors are equal - YOU LOST!
+	beq $t1, $t4, Exit
+    	beq $t1, $t5, Exit
+    	beq $t1, $t6, Exit
 	beq $t1, $t3, Exit #If you hit the border - YOU LOST!
 	j BodyCollisionDone # if not, leave function
 
@@ -895,9 +1415,22 @@ CheckDown:
 	#get color at screen address
 	lw $t1, 0($v0)
 	#add $s6, $t1, $zero
+	lw $t4, blizardColor    	 # load blizard color
+    	beq $t1, $t4, BodyCollisionDone #exit if blizard condition
 	lw $t2, snakeColor
 	lw $t3, borderColor
+	lw $t4, snakeColorR
+    	lw $t5, snakeColorG
+    	
+    	lw $t6, snakeColorY
+    	beq $t1, $t6, Exit
+    	
+    	lw $t6, blizardSnake
+    	
 	beq $t1, $t2, Exit #If colors are equal - YOU LOST!
+	beq $t1, $t4, Exit
+    	beq $t1, $t5, Exit
+    	beq $t1, $t6, Exit
 	beq $t1, $t3, Exit #If you hit the border - YOU LOST!
 	j BodyCollisionDone # if not, leave function
 
@@ -909,9 +1442,22 @@ CheckLeft:
 	#get color at screen address
 	lw $t1, 0($v0)
 	#add $s6, $t1, $zero
+	lw $t4, blizardColor    	 # load blizard color
+    	beq $t1, $t4, BodyCollisionDone #exit if blizard condition
 	lw $t2, snakeColor
 	lw $t3, borderColor
+	lw $t4, snakeColorR
+    	lw $t5, snakeColorG
+    	
+    	lw $t6, snakeColorY
+    	beq $t1, $t6, Exit
+    	
+    	lw $t6, blizardSnake
+    	
 	beq $t1, $t2, Exit #If colors are equal - YOU LOST!
+	beq $t1, $t4, Exit
+    	beq $t1, $t5, Exit
+    	beq $t1, $t6, Exit
 	beq $t1, $t3, Exit #If you hit the border - YOU LOST!
 	j BodyCollisionDone # if not, leave function
 
@@ -923,15 +1469,187 @@ CheckRight:
 	#get color at screen address
 	lw $t1, 0($v0)
 	#add $s6, $t1, $zero
+	lw $t4, blizardColor    	 # load blizard color
+    	beq $t1, $t4, BodyCollisionDone #exit if blizard condition
 	lw $t2, snakeColor
 	lw $t3, borderColor
+	lw $t4, snakeColorR
+    	lw $t5, snakeColorG
+    	
+    	lw $t6, snakeColorY
+    	beq $t1, $t6, Exit
+    	
+    	lw $t6, blizardSnake
+    	
 	beq $t1, $t2, Exit #If colors are equal - YOU LOST!
+	beq $t1, $t4, Exit
+    	beq $t1, $t5, Exit
+    	beq $t1, $t6, Exit
 	beq $t1, $t3, Exit #If you hit the border - YOU LOST!
 	j BodyCollisionDone # if not, leave function
 
 BodyCollisionDone:
 	lw $ra, 0($sp) #restore return address
 	jr $ra		
+	
+##################################################################
+# Check Snake Body Collision On Terrain Blizzard
+# $a0 - snakeHeadPositionX
+# $a1 - snakeHeadPositionY
+# $a2 - snakeHeadDirection
+##################################################################
+# returns $v0:
+#	0 - does not hit body
+#	1 - does hit body
+##################################################################	
+CheckGameTerrainCollision:
+	#save head coordinates
+	add $s3, $a0, $zero
+	add $s4, $a1, $zero
+	#save return address
+	sw $ra, 0($sp)
+
+	beq  $a2, 119, CheckUpT
+	beq  $a2, 115, CheckDownT
+	beq  $a2, 97,  CheckLeftT
+	beq  $a2, 100, CheckRightT
+	j TerrainCollisionDone #for error?
+	
+CheckUpT:
+	#look above the current position
+	addiu $a1, $a1, -1
+	jal CoordinateToAddress
+	#get color at screen address
+	lw $t1, 0($v0)
+	#add $s6, $t1, $zero
+	lw $t2, snakeColor
+	lw $t3, blizardColor
+	lw $t4, iceColor
+	beq $t1, $t2, invisible #If colors are equal - change snake 
+	beq $t1, $t3, invisible #If you hit the border - chnage snake
+	beq $t1, $t4, iceLoop
+	j normalColors		 #If no blizzard then switch colors to normal
+	j TerrainCollisionDone # if not, leave function
+
+CheckDownT:
+	#look below the current position
+	addiu $a1, $a1, 1
+	jal CoordinateToAddress
+	#get color at screen address
+	lw $t1, 0($v0)
+	#add $s6, $t1, $zero
+	lw $t2, snakeColor
+	lw $t3, blizardColor
+	lw $t4, iceColor
+	beq $t1, $t2, invisible #If colors are equal - change snake 
+	beq $t1, $t3, invisible #If you hit the border - chnage snake
+	beq $t1, $t4, iceLoop
+	j normalColors
+	j TerrainCollisionDone # if not, leave function
+
+CheckLeftT:
+
+	#look to the left of the current position
+	addiu $a0, $a0, -1
+	jal CoordinateToAddress
+	#get color at screen address
+	lw $t1, 0($v0)
+	#add $s6, $t1, $zero
+	lw $t2, snakeColor
+	lw $t3, blizardColor
+	lw $t4, iceColor
+	beq $t1, $t2, invisible #If colors are equal - change snake 
+	beq $t1, $t3, invisible #If you hit the border - chnage snake
+	beq $t1, $t4, iceLoop
+	j normalColors
+	j TerrainCollisionDone # if not, leave function
+
+CheckRightT:
+
+	#look to the right of the current position
+	addiu $a0, $a0, 1
+	jal CoordinateToAddress
+	#get color at screen address
+	lw $t1, 0($v0)
+	#add $s6, $t1, $zero
+	lw $t2, snakeColor
+	lw $t3, blizardColor
+	lw $t4, iceColor
+	beq $t1, $t2, invisible #If colors are equal - change snake 
+	beq $t1, $t3, invisible #If you hit the border - chnage snake
+	beq $t1, $t4, iceLoop
+	j normalColors
+	j TerrainCollisionDone # if not, leave function
+
+TerrainCollisionDone:
+	lw $ra, 0($sp) #restore return address
+	jr $ra
+	
+invisible: #sets all colors to off white
+	lw $t0, blizardSnake
+	sw $t0, snakeColor
+	sw $t0, snakeColorR
+	sw $t0, snakeColorG
+	sw $t0, snakeColorY
+	lw $ra, 0($sp) #restore return address
+	jr $ra		#return to call
+	
+normalColors: #sets all colors to normal
+	li $t0, 0x0066cc
+	sw $t0, snakeColor
+	li $t0, 0xee0000
+	sw $t0, snakeColorR
+	li $t0, 0x00ff00
+	sw $t0, snakeColorG
+	li $t0, 0xffff00
+	sw $t0, snakeColorY
+	lw $ra, 0($sp) #restore return address
+	jr $ra		#return to call
+##################################################################
+#iceLoop: will draw the snake based on direction current direction
+##################################################################
+iceLoop: #loop which draws the snake untill it leaves the ice
+
+	#draw head in new position, move Y position based on direction
+	lw $t0, snakeHeadX
+	lw $t1, snakeHeadY
+	lw $t2, direction
+	li $t3, 1 #snake is on ice
+	sw $t3, isOnIce
+	
+	#check the current direction
+	beq $t2, 119, iceUp
+	beq $t2, 115, iceDown
+	beq $t2, 97, iceLeft
+	beq $t2, 100, iceRight
+	
+iceUp:
+	addiu $t1, $t1, -1	#y up
+	j iceDraw
+iceDown: 
+	addiu $t1, $t1, 1	#y down
+	j iceDraw
+iceLeft:
+	addiu $t0, $t0, -1 	#x left
+	j iceDraw
+iceRight:
+	addiu $t0, $t0, 1	#x right
+	j iceDraw
+
+iceDraw:
+	add $a0, $t0, $zero
+	add $a1, $t1, $zero
+	jal CoordinateToAddress
+	add $a0, $v0, $zero
+	lw $a1, snakeColor #currently the snake is only blue on the ice
+	jal DrawPixel
+
+	sw  $t1, snakeHeadY
+	sw  $t0, snakeHeadX
+	j UpdateTailPosition #head updated, update tail
+	
+	lw $ra, 0($sp) #restore return address
+	jr $ra		#return to call
 	
 ##################################################################
 # Increase Difficulty Function
@@ -968,6 +1686,28 @@ IncreaseDifficulty:
 FinishedDiff:
 	jr $ra
 
+CodeToColor:
+	beq $a1, 1, isC1
+	beq $a1, 2, isC2
+	beq $a1, 3, isC3
+	beq $a1, 4, isC4
+		
+	lw $a1, backgroundColor
+	jr $ra
+		
+	isC1:
+		lw $a1, iceColor  
+		jr $ra
+	isC2:
+		lw $a1, desertColor  
+		jr $ra
+	isC3:
+		lw $a1, borderColor  
+		jr $ra
+	isC4:
+		lw $a1, blizardColor  
+		jr $ra
+
 Exit:   
 	#play a sound tune to signify game over
 	li $v0, 31
@@ -988,6 +1728,14 @@ Exit:
 	li $a2, 32
 	li $a3, 127
 	syscall
+	
+	li $t0, 1
+	li $t3, 15 # times to gen border
+	li $t9, 0 # comparision value (move back and forth) TODO
+	li $t8, -1 # value to increment by: -1 or 1
+	li $t7, 62 # default for X and Y
+	j BorderGen
+	endGame2:
 	
 	li $v0, 56 #syscall value for dialog
 	la $a0, lostMessage #get message
